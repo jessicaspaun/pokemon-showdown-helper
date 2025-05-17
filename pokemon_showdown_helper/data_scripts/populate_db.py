@@ -36,6 +36,7 @@ def main_populate(db_path: Path = constants.DB_PATH):
     if gen7ou:
         insert_format('gen7ou', '[Gen 7] OU', 'Smogon OU (OverUsed)', db_path)
         insert_format_rules('gen7ou', gen7ou.get('ruleset', []), gen7ou.get('banlist', []), db_path)
+    insert_smogon_analysis_sets(db_path)
 
 def insert_pokedex_data(pokedex_data, db_path):
     """
@@ -177,6 +178,58 @@ def insert_format_rules(format_id: str, ruleset: list, banlist: list, db_path: P
             "INSERT OR REPLACE INTO FormatRules (format_id, rule_type, rule) VALUES (?, ?, ?)",
             (format_id, 'banlist', ban)
         )
+    conn.commit()
+    conn.close()
+
+def create_gen7ou_sets_table(db_path: Path):
+    """Create the Gen7OUSets table if it does not exist."""
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    cur.execute('''
+        CREATE TABLE IF NOT EXISTS Gen7OUSets (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            pokemon_name TEXT,
+            set_name TEXT,
+            moves TEXT,
+            ability TEXT,
+            item TEXT,
+            nature TEXT,
+            evs TEXT,
+            source TEXT
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+def insert_smogon_analysis_sets(db_path: Path):
+    """
+    Fetch, parse, and insert Smogon analysis sets for all Gen 7 OU Pokémon into the Gen7OUSets table.
+    Args:
+        db_path: Path to the SQLite database file.
+    """
+    from data_scripts import fetch_smogon_analysis_sets
+    create_gen7ou_sets_table(db_path)
+    pokemon_list = fetch_smogon_analysis_sets.get_gen7ou_pokemon_list(db_path)
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    for pokemon_name in pokemon_list:
+        html_content = fetch_smogon_analysis_sets.workspace_pokemon_smogon_page_html(pokemon_name)
+        if html_content:
+            sets = fetch_smogon_analysis_sets.parse_smogon_page_for_sets(html_content)
+            for set_data in sets:
+                cur.execute('''
+                    INSERT INTO Gen7OUSets (pokemon_name, set_name, moves, ability, item, nature, evs, source)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    pokemon_name,
+                    set_data.get('name', ''),
+                    ','.join(set_data.get('moves', [])),
+                    set_data.get('ability', ''),
+                    set_data.get('item', ''),
+                    set_data.get('nature', ''),
+                    str(set_data.get('evs', {})),
+                    'smogon_analysis_page'
+                ))
     conn.commit()
     conn.close()
 

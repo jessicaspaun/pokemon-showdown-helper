@@ -5,6 +5,8 @@ import sqlite3
 from pathlib import Path
 import pytest
 from data_scripts import populate_db
+import sys
+import types
 
 def test_insert_pokedex_data(tmp_path):
     db_path = tmp_path / "test_db.sqlite3"
@@ -232,4 +234,41 @@ def test_insert_format_rules(tmp_path):
     cur.execute("SELECT rule FROM FormatRules WHERE format_id = 'gen7ou' AND rule_type = 'banlist'")
     bans = [row[0] for row in cur.fetchall()]
     assert set(bans) == set(banlist)
+    conn.close()
+
+def test_insert_smogon_analysis_sets(monkeypatch, tmp_path):
+    db_path = tmp_path / "test_db.sqlite3"
+    # Create minimal required tables
+    populate_db.create_gen7ou_sets_table(db_path)
+    # Mock fetch_smogon_analysis_sets module
+    mock_module = types.SimpleNamespace()
+    mock_module.get_gen7ou_pokemon_list = lambda db_path: ["Pikachu"]
+    mock_module.workspace_pokemon_smogon_page_html = lambda name: "<html></html>"
+    mock_module.parse_smogon_page_for_sets = lambda html: [
+        {
+            "name": "Offensive",
+            "moves": ["Thunderbolt", "Volt Switch"],
+            "ability": "Static",
+            "item": "Light Ball",
+            "nature": "Timid",
+            "evs": {"spa": 252, "spe": 252, "hp": 4}
+        }
+    ]
+    monkeypatch.setitem(sys.modules, "data_scripts.fetch_smogon_analysis_sets", mock_module)
+    # Run insertion
+    populate_db.insert_smogon_analysis_sets(db_path)
+    # Check DB
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    cur.execute("SELECT pokemon_name, set_name, moves, ability, item, nature, evs, source FROM Gen7OUSets")
+    row = cur.fetchone()
+    assert row is not None
+    assert row[0] == "Pikachu"
+    assert row[1] == "Offensive"
+    assert row[2] == "Thunderbolt,Volt Switch"
+    assert row[3] == "Static"
+    assert row[4] == "Light Ball"
+    assert row[5] == "Timid"
+    assert row[6] == "{'spa': 252, 'spe': 252, 'hp': 4}"
+    assert row[7] == "smogon_analysis_page"
     conn.close() 
