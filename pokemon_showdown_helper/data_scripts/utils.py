@@ -33,13 +33,76 @@ def download_json(url: str, save_path: Optional[Path] = None) -> Dict[str, Any]:
     """
     response = requests.get(url)
     response.raise_for_status()
-    data = response.json()
-
+    
+    # Handle TypeScript files
+    if url.endswith('.ts'):
+        content = response.text
+        
+        # Remove export statement and trailing semicolon
+        content = re.sub(r'^export const [^=]+ = ', '', content, flags=re.MULTILINE)
+        content = re.sub(r';\s*$', '', content, flags=re.MULTILINE)
+        
+        # Remove comments (both single-line and multi-line)
+        content = re.sub(r'//.*$', '', content, flags=re.MULTILINE)
+        content = re.sub(r'/\*[\s\S]*?\*/', '', content)
+        
+        # Remove trailing commas before closing braces/brackets
+        content = re.sub(r',([ \t\r\n]*[}\]])', r'\1', content)
+        
+        # Handle string literals
+        def replace_string(match):
+            s = match.group(1)
+            # Escape backslashes and double quotes only
+            s = s.replace('\\', '\\\\').replace('"', '\\"')
+            return f'"{s}"'
+        
+        # Convert single-quoted strings to double-quoted strings
+        content = re.sub(r"'((?:[^'\\]|\\.)*)'", replace_string, content)
+        
+        # Quote unquoted property names
+        content = re.sub(r'([,{\[]\s*)([a-zA-Z0-9_\-]+)\s*:', r'\1"\2":', content)
+        
+        # Remove invalid control characters
+        content = re.sub(r'[\x00-\x1F\x7F]', '', content)
+        
+        # Handle TypeScript-specific syntax
+        content = re.sub(r':\s*([A-Z][a-zA-Z0-9]*)\s*\[\]', r': []', content)  # Remove type annotations for arrays
+        content = re.sub(r':\s*([A-Z][a-zA-Z0-9]*)', r': null', content)  # Replace type annotations with null
+        content = re.sub(r'as\s+[A-Z][a-zA-Z0-9]*', '', content)  # Remove type assertions
+        
+        # Find the object between the first { and the last }
+        start = content.find('{')
+        end = content.rfind('}') + 1
+        if start == -1 or end == 0:
+            raise ValueError(f"Could not find JSON object in TypeScript file: {url}")
+        
+        json_str = content[start:end]
+        
+        try:
+            data = json.loads(json_str)
+        except json.JSONDecodeError as e:
+            print(f"Error parsing JSON from {url}")
+            print(f"JSON string: {json_str[:200]}...")  # Print first 200 chars for debugging
+            # Save the problematic JSON string to a file for inspection
+            with open("debug_failed_json.txt", "w") as debug_file:
+                debug_file.write(json_str)
+            # Print the problematic line and its surrounding context
+            lines = json_str.split('\n')
+            error_line = e.lineno - 1  # Adjust for 0-indexing
+            start_line = max(0, error_line - 2)
+            end_line = min(len(lines), error_line + 3)
+            print("Problematic line and context:")
+            for i in range(start_line, end_line):
+                print(f"Line {i + 1}: {lines[i]}")
+            raise e
+    else:
+        data = response.json()
+    
     if save_path:
         save_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(save_path, 'w', encoding='utf-8') as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
-
+        with open(save_path, 'w') as f:
+            json.dump(data, f, indent=2)
+    
     return data
 
 

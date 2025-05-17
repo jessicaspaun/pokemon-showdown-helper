@@ -4,6 +4,12 @@ Database schema setup for Pokémon Showdown Helper.
 Defines and initializes the database tables for formats, format rules, and natures.
 """
 
+import os
+import sys
+
+# Add the parent directory to the Python path
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import sqlite3
 from pathlib import Path
 from data_scripts import constants
@@ -119,6 +125,17 @@ def init_database(db_path: Path = constants.DB_PATH):
             nature TEXT,
             evs TEXT,
             source TEXT
+        )
+    ''')
+
+    # Table for TeamTemplates
+    cur.execute('''
+        CREATE TABLE IF NOT EXISTS TeamTemplates (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE,
+            description TEXT,
+            format TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
 
