@@ -182,4 +182,54 @@ def test_insert_typechart_data(tmp_path):
     cur.execute("SELECT defending_type, multiplier FROM Typechart WHERE attacking_type = 'Electric'")
     results = dict(cur.fetchall())
     assert results == {"Ground": 2, "Flying": 0, "Steel": 1}
+    conn.close()
+
+def test_insert_format(tmp_path):
+    db_path = tmp_path / "test_db.sqlite3"
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    cur.execute('''
+        CREATE TABLE IF NOT EXISTS Formats (
+            id TEXT PRIMARY KEY,
+            name TEXT,
+            description TEXT
+        )
+    ''')
+    conn.commit()
+    conn.close()
+    populate_db.insert_format('gen7ou', '[Gen 7] OU', 'Smogon OU (OverUsed)', db_path)
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM Formats WHERE id = 'gen7ou'")
+    row = cur.fetchone()
+    assert row is not None
+    assert row[1] == '[Gen 7] OU'
+    assert row[2] == 'Smogon OU (OverUsed)'
+    conn.close()
+
+def test_insert_format_rules(tmp_path):
+    db_path = tmp_path / "test_db.sqlite3"
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    cur.execute('''
+        CREATE TABLE IF NOT EXISTS FormatRules (
+            format_id TEXT,
+            rule_type TEXT,
+            rule TEXT,
+            PRIMARY KEY (format_id, rule_type, rule)
+        )
+    ''')
+    conn.commit()
+    conn.close()
+    ruleset = ['Standard', 'Team Preview']
+    banlist = ['Aegislash', 'Blaziken']
+    populate_db.insert_format_rules('gen7ou', ruleset, banlist, db_path)
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    cur.execute("SELECT rule FROM FormatRules WHERE format_id = 'gen7ou' AND rule_type = 'ruleset'")
+    rules = [row[0] for row in cur.fetchall()]
+    assert set(rules) == set(ruleset)
+    cur.execute("SELECT rule FROM FormatRules WHERE format_id = 'gen7ou' AND rule_type = 'banlist'")
+    bans = [row[0] for row in cur.fetchall()]
+    assert set(bans) == set(banlist)
     conn.close() 

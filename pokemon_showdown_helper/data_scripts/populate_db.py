@@ -2,7 +2,7 @@
 Populate the database with core Pokémon Showdown data.
 """
 from pathlib import Path
-from data_scripts import database_setup, fetch_ps_core_data, constants
+from data_scripts import database_setup, fetch_ps_core_data, constants, fetch_ps_rules_and_formats
 import sqlite3
 from typing import Dict, Any
 
@@ -30,6 +30,12 @@ def main_populate(db_path: Path = constants.DB_PATH):
     insert_items_data(items_data, db_path)
     insert_learnsets_data(learnsets_data, db_path)
     insert_typechart_data(typechart_data, db_path)
+    # Insert Gen 7 OU format and rules
+    formats_ts = fetch_ps_rules_and_formats.workspace_ps_formats_ts_raw()
+    gen7ou = fetch_ps_rules_and_formats.parse_gen7ou_rules_from_formats_ts(formats_ts)
+    if gen7ou:
+        insert_format('gen7ou', '[Gen 7] OU', 'Smogon OU (OverUsed)', db_path)
+        insert_format_rules('gen7ou', gen7ou.get('ruleset', []), gen7ou.get('banlist', []), db_path)
 
 def insert_pokedex_data(pokedex_data, db_path):
     """
@@ -143,6 +149,34 @@ def insert_typechart_data(typechart_data: Dict[str, Any], db_path: Path) -> None
                 "INSERT OR REPLACE INTO Typechart (attacking_type, defending_type, multiplier) VALUES (?, ?, ?)",
                 (attacking_type, defending_type, multiplier)
             )
+    conn.commit()
+    conn.close()
+
+def insert_format(format_id: str, name: str, description: str, db_path: Path) -> None:
+    """Insert a format into the Formats table."""
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    cur.execute(
+        "INSERT OR REPLACE INTO Formats (id, name, description) VALUES (?, ?, ?)",
+        (format_id, name, description)
+    )
+    conn.commit()
+    conn.close()
+
+def insert_format_rules(format_id: str, ruleset: list, banlist: list, db_path: Path) -> None:
+    """Insert rules and bans for a format into the FormatRules table."""
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    for rule in ruleset:
+        cur.execute(
+            "INSERT OR REPLACE INTO FormatRules (format_id, rule_type, rule) VALUES (?, ?, ?)",
+            (format_id, 'ruleset', rule)
+        )
+    for ban in banlist:
+        cur.execute(
+            "INSERT OR REPLACE INTO FormatRules (format_id, rule_type, rule) VALUES (?, ?, ?)",
+            (format_id, 'banlist', ban)
+        )
     conn.commit()
     conn.close()
 
