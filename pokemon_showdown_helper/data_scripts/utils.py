@@ -61,28 +61,27 @@ def to_ps_id(name: str) -> str:
         >>> to_ps_id("Nidoran♀")
         'nidoranf'
     """
-    # Remove special characters and spaces
-    name = re.sub(r'[^a-zA-Z0-9]', '', name.lower())
-    
-    # Handle special cases
+    # Handle special cases first
     special_cases = {
-        'nidoranf': 'nidoran♀',
-        'nidoranm': 'nidoran♂',
-        'mrmime': 'mr. mime',
-        'mimejr': 'mime jr.',
-        'typenull': 'type: null',
-        'porygonz': 'porygon-z',
-        'jangmoo': 'jangmo-o',
-        'hakamoo': 'hakamo-o',
-        'kommoo': 'kommo-o',
+        'nidoran♀': 'nidoranf',
+        'nidoran♂': 'nidoranm',
+        'mr. mime': 'mrmime',
+        'mime jr.': 'mimejr',
+        'type: null': 'typenull',
+        'porygon-z': 'porygonz',
+        'jangmo-o': 'jangmoo',
+        'hakamo-o': 'hakamoo',
+        'kommo-o': 'kommoo',
     }
     
-    # Check if the cleaned name matches any special cases
-    for ps_id, original in special_cases.items():
-        if name == ps_id:
+    # Check if the name matches any special cases
+    name_lower = name.lower()
+    for original, ps_id in special_cases.items():
+        if name_lower == original:
             return ps_id
     
-    return name
+    # If no special case matches, remove special characters and spaces
+    return re.sub(r'[^a-zA-Z0-9]', '', name_lower)
 
 
 def clean_name(name: str) -> str:
@@ -104,7 +103,9 @@ def clean_name(name: str) -> str:
         'nidoran'
     """
     # Remove special characters and convert to lowercase
-    return re.sub(r'[^a-zA-Z0-9\s]', '', name.lower()).strip()
+    cleaned = re.sub(r'[^a-zA-Z0-9\s]', '', name.lower())
+    # Replace multiple spaces with a single space and strip
+    return re.sub(r'\s+', ' ', cleaned).strip()
 
 
 def init_selenium_driver(headless: bool = True) -> webdriver.Chrome:
