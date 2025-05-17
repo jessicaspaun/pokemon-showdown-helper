@@ -4,6 +4,7 @@ Populate the database with core Pokémon Showdown data.
 from pathlib import Path
 from data_scripts import database_setup, fetch_ps_core_data, constants
 import sqlite3
+from typing import Dict, Any
 
 def main_populate(db_path: Path = constants.DB_PATH):
     """
@@ -119,41 +120,29 @@ def insert_items_data(items_data, db_path):
     conn.commit()
     conn.close()
 
-def insert_learnsets_data(learnsets_data, db_path):
-    """
-    Insert parsed learnsets data into the PokemonLearnset table.
-    Args:
-        learnsets_data: Parsed learnsets JSON data.
-        db_path: Path to the SQLite database file.
-    """
+def insert_learnsets_data(learnsets_data: Dict[str, Any], db_path: Path) -> None:
+    """Insert learnsets data into the PokemonLearnset table."""
     conn = sqlite3.connect(db_path)
     cur = conn.cursor()
     for pokemon_id, data in learnsets_data.items():
-        learnset = data.get('learnset', [])
-        for move in learnset:
-            cur.execute('''
-                INSERT OR REPLACE INTO PokemonLearnset (pokemon_id, move_id)
-                VALUES (?, ?)
-            ''', (pokemon_id, move))
+        for move_id in data.get("learnset", []):
+            cur.execute(
+                "INSERT OR REPLACE INTO PokemonLearnset (pokemon_id, move_id) VALUES (?, ?)",
+                (pokemon_id, move_id)
+            )
     conn.commit()
     conn.close()
 
-def insert_typechart_data(typechart_data, db_path):
-    """
-    Insert parsed typechart data into the Typechart table.
-    Args:
-        typechart_data: Parsed typechart JSON data.
-        db_path: Path to the SQLite database file.
-    """
+def insert_typechart_data(typechart_data: Dict[str, Any], db_path: Path) -> None:
+    """Insert typechart data into the Typechart table."""
     conn = sqlite3.connect(db_path)
     cur = conn.cursor()
-    for type_name, data in typechart_data.items():
-        damage_taken = data.get('damageTaken', {})
-        for target_type, multiplier in damage_taken.items():
-            cur.execute('''
-                INSERT OR REPLACE INTO Typechart (attacking_type, defending_type, multiplier)
-                VALUES (?, ?, ?)
-            ''', (type_name, target_type, multiplier))
+    for attacking_type, data in typechart_data.items():
+        for defending_type, multiplier in data.get("damageTaken", {}).items():
+            cur.execute(
+                "INSERT OR REPLACE INTO Typechart (attacking_type, defending_type, multiplier) VALUES (?, ?, ?)",
+                (attacking_type, defending_type, multiplier)
+            )
     conn.commit()
     conn.close()
 
