@@ -337,4 +337,161 @@ def test_insert_usage_stats_sets(monkeypatch, tmp_path):
     assert row[5] == "Timid"
     assert row[6] == "{'hp': 252, 'atk': 0, 'def': 0, 'spa': 252, 'spd': 4, 'spe': 0}"
     assert row[7] == "usage_stats_2022-12"
+    conn.close()
+
+def test_main_populate_integration(monkeypatch, tmp_path):
+    """Integration test for main_populate to verify all data types are correctly populated."""
+    db_path = tmp_path / "test_db.sqlite3"
+    
+    # Mock utils.download_json to prevent real HTTP requests
+    def mock_download_json(url, save_path):
+        if "pokedex" in url:
+            return {
+                "pikachu": {
+                    "species": "Pikachu",
+                    "num": 25,
+                    "types": ["Electric"],
+                    "baseStats": {"hp": 35, "atk": 55, "def": 40, "spa": 50, "spd": 50, "spe": 90}
+                }
+            }
+        elif "moves" in url:
+            return {
+                "thunderbolt": {
+                    "name": "Thunderbolt",
+                    "num": 85,
+                    "type": "Electric",
+                    "power": 90,
+                    "accuracy": 100
+                }
+            }
+        elif "abilities" in url:
+            return {
+                "static": {
+                    "name": "Static",
+                    "desc": "May paralyze on contact."
+                }
+            }
+        elif "items" in url:
+            return {
+                "lightball": {
+                    "name": "Light Ball",
+                    "desc": "Doubles Pikachu's Attack and Sp. Atk."
+                }
+            }
+        elif "learnsets" in url:
+            return {
+                "pikachu": {
+                    "learnset": ["thunderbolt", "quickattack"]
+                }
+            }
+        elif "typechart" in url:
+            return {
+                "Electric": {
+                    "damageTaken": {"Ground": 2, "Flying": 0, "Steel": 1}
+                }
+            }
+        return {}
+    
+    monkeypatch.setattr("data_scripts.utils.download_json", mock_download_json)
+    
+    # Mock format rules fetching
+    mock_fetch_ps_rules_and_formats = types.SimpleNamespace()
+    mock_fetch_ps_rules_and_formats.workspace_ps_formats_ts_raw = lambda: "mock formats.ts content"
+    monkeypatch.setattr(
+        "data_scripts.fetch_ps_rules_and_formats.parse_gen7ou_rules_from_formats_ts",
+        lambda _: {"ruleset": ["Standard", "Team Preview"], "banlist": ["Aegislash", "Blaziken"]}
+    )
+    monkeypatch.setitem(sys.modules, "data_scripts.fetch_ps_rules_and_formats", mock_fetch_ps_rules_and_formats)
+    
+    # Mock Smogon analysis sets fetching
+    mock_fetch_smogon_analysis_sets = types.SimpleNamespace()
+    mock_fetch_smogon_analysis_sets.get_gen7ou_pokemon_list = lambda db_path: ["Pikachu"]
+    mock_fetch_smogon_analysis_sets.workspace_pokemon_smogon_page_html = lambda name: "<html></html>"
+    mock_fetch_smogon_analysis_sets.parse_smogon_page_for_sets = lambda html: [
+        {
+            "name": "Offensive",
+            "moves": ["Thunderbolt", "Volt Switch"],
+            "ability": "Static",
+            "item": "Light Ball",
+            "nature": "Timid",
+            "evs": {"spa": 252, "spe": 252, "hp": 4}
+        }
+    ]
+    monkeypatch.setitem(sys.modules, "data_scripts.fetch_smogon_analysis_sets", mock_fetch_smogon_analysis_sets)
+    
+    # Mock usage stats fetching
+    mock_fetch_usage_stats = types.SimpleNamespace()
+    mock_fetch_usage_stats.workspace_gen7ou_chaos_data = lambda month: {
+        "data": {
+            "Pikachu": {
+                "Abilities": {"Static": {"usage": 0.7}},
+                "Items": {"Light Ball": {"usage": 0.8}},
+                "Moves": {
+                    "Thunderbolt": {"usage": 0.9},
+                    "Volt Switch": {"usage": 0.8},
+                    "Hidden Power Ice": {"usage": 0.7},
+                    "Grass Knot": {"usage": 0.6}
+                },
+                "Spreads": {"Timid:252/0/0/252/4/0": {"usage": 0.6}}
+            }
+        }
+    }
+    mock_fetch_usage_stats.parse_chaos_data = lambda data: {
+        "Pikachu": {
+            "top_abilities": [("Static", {"usage": 0.7})],
+            "top_items": [("Light Ball", {"usage": 0.8})],
+            "top_moves": [
+                ("Thunderbolt", {"usage": 0.9}),
+                ("Volt Switch", {"usage": 0.8}),
+                ("Hidden Power Ice", {"usage": 0.7}),
+                ("Grass Knot", {"usage": 0.6})
+            ],
+            "top_spreads": [("Timid:252/0/0/252/4/0", {"usage": 0.6})]
+        }
+    }
+    monkeypatch.setitem(sys.modules, "data_scripts.fetch_usage_stats", mock_fetch_usage_stats)
+    
+    # Run main_populate
+    populate_db.main_populate(db_path)
+    
+    # Verify all data types are populated
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    
+    # Check Pokemon
+    cur.execute("SELECT * FROM Pokemon WHERE id = 'pikachu'")
+    assert cur.fetchone() is not None
+    
+    # Check Moves
+    cur.execute("SELECT * FROM Moves WHERE id = 'thunderbolt'")
+    assert cur.fetchone() is not None
+    
+    # Check Abilities
+    cur.execute("SELECT * FROM Abilities WHERE id = 'static'")
+    assert cur.fetchone() is not None
+    
+    # Check Items
+    cur.execute("SELECT * FROM Items WHERE id = 'lightball'")
+    assert cur.fetchone() is not None
+    
+    # Check Learnset
+    cur.execute("SELECT * FROM PokemonLearnset WHERE pokemon_id = 'pikachu'")
+    assert len(cur.fetchall()) == 2
+    
+    # Check Typechart
+    cur.execute("SELECT * FROM Typechart WHERE attacking_type = 'Electric'")
+    assert len(cur.fetchall()) == 3
+    
+    # Check Format Rules
+    cur.execute("SELECT rule_type, rule FROM FormatRules WHERE format_id = 'gen7ou'")
+    rules = set(cur.fetchall())
+    # The expected rules from the mock
+    expected_rules = {('ruleset', 'Standard'), ('ruleset', 'Team Preview'), ('banlist', 'Aegislash'), ('banlist', 'Blaziken')}
+    assert expected_rules.issubset(rules)
+    
+    # Check Gen7OUSets (should have both analysis and usage stats sets)
+    cur.execute("SELECT source FROM Gen7OUSets WHERE pokemon_name = 'Pikachu'")
+    sources = {row[0] for row in cur.fetchall()}
+    assert sources == {'smogon_analysis_page', 'usage_stats_2022-12'}
+    
     conn.close() 

@@ -21,8 +21,8 @@ def init_database(db_path: Path = constants.DB_PATH):
     # Table for competitive formats (e.g., Gen 7 OU)
     cur.execute('''
         CREATE TABLE IF NOT EXISTS Formats (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT UNIQUE NOT NULL,
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
             description TEXT
         )
     ''')
@@ -30,10 +30,10 @@ def init_database(db_path: Path = constants.DB_PATH):
     # Table for format rules (banlists, clauses, etc.)
     cur.execute('''
         CREATE TABLE IF NOT EXISTS FormatRules (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            format_id INTEGER NOT NULL,
-            rule_type TEXT NOT NULL,  -- e.g., 'ban', 'clause', 'restriction'
-            rule_text TEXT NOT NULL,
+            format_id TEXT NOT NULL,
+            rule_type TEXT NOT NULL,  -- e.g., 'banlist', 'ruleset'
+            rule TEXT NOT NULL,
+            PRIMARY KEY (format_id, rule_type, rule),
             FOREIGN KEY(format_id) REFERENCES Formats(id)
         )
     ''')
@@ -41,10 +41,84 @@ def init_database(db_path: Path = constants.DB_PATH):
     # Table for natures
     cur.execute('''
         CREATE TABLE IF NOT EXISTS Natures (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT UNIQUE NOT NULL,
+            name TEXT PRIMARY KEY,
             increased_stat TEXT,
             decreased_stat TEXT
+        )
+    ''')
+
+    # Table for Pokemon
+    cur.execute('''
+        CREATE TABLE IF NOT EXISTS Pokemon (
+            id TEXT PRIMARY KEY,
+            name TEXT,
+            num INTEGER,
+            types TEXT,
+            base_stats TEXT
+        )
+    ''')
+
+    # Table for Moves
+    cur.execute('''
+        CREATE TABLE IF NOT EXISTS Moves (
+            id TEXT PRIMARY KEY,
+            name TEXT,
+            num INTEGER,
+            type TEXT,
+            power INTEGER,
+            accuracy INTEGER
+        )
+    ''')
+
+    # Table for Abilities
+    cur.execute('''
+        CREATE TABLE IF NOT EXISTS Abilities (
+            id TEXT PRIMARY KEY,
+            name TEXT,
+            description TEXT
+        )
+    ''')
+
+    # Table for Items
+    cur.execute('''
+        CREATE TABLE IF NOT EXISTS Items (
+            id TEXT PRIMARY KEY,
+            name TEXT,
+            description TEXT
+        )
+    ''')
+
+    # Table for PokemonLearnset
+    cur.execute('''
+        CREATE TABLE IF NOT EXISTS PokemonLearnset (
+            pokemon_id TEXT,
+            move_id TEXT,
+            PRIMARY KEY (pokemon_id, move_id)
+        )
+    ''')
+
+    # Table for Typechart
+    cur.execute('''
+        CREATE TABLE IF NOT EXISTS Typechart (
+            attacking_type TEXT,
+            defending_type TEXT,
+            multiplier INTEGER,
+            PRIMARY KEY (attacking_type, defending_type)
+        )
+    ''')
+
+    # Table for Gen7OUSets
+    cur.execute('''
+        CREATE TABLE IF NOT EXISTS Gen7OUSets (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            pokemon_name TEXT,
+            set_name TEXT,
+            moves TEXT,
+            ability TEXT,
+            item TEXT,
+            nature TEXT,
+            evs TEXT,
+            source TEXT
         )
     ''')
 
