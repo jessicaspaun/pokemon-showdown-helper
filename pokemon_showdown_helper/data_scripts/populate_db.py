@@ -37,6 +37,7 @@ def main_populate(db_path: Path = constants.DB_PATH):
         insert_format('gen7ou', '[Gen 7] OU', 'Smogon OU (OverUsed)', db_path)
         insert_format_rules('gen7ou', gen7ou.get('ruleset', []), gen7ou.get('banlist', []), db_path)
     insert_smogon_analysis_sets(db_path)
+    insert_usage_stats_sets(db_path, month="2022-12")
 
 def insert_pokedex_data(pokedex_data, db_path):
     """
@@ -230,6 +231,51 @@ def insert_smogon_analysis_sets(db_path: Path):
                     str(set_data.get('evs', {})),
                     'smogon_analysis_page'
                 ))
+    conn.commit()
+    conn.close()
+
+def insert_usage_stats_sets(db_path: Path, month: str = "2022-12"):
+    """
+    Fetch, parse, and insert usage stats-derived sets for Gen 7 OU into the Gen7OUSets table.
+    Args:
+        db_path: Path to the SQLite database file.
+        month: Month in YYYY-MM format (default: "2022-12").
+    """
+    from data_scripts import fetch_usage_stats
+    create_gen7ou_sets_table(db_path)
+    chaos_data = fetch_usage_stats.workspace_gen7ou_chaos_data(month=month)
+    parsed = fetch_usage_stats.parse_chaos_data(chaos_data)
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    for pokemon_name, stats in parsed.items():
+        # Compose a set from the most used ability, item, moves, and spread
+        set_name = f"Usage Stats {month}"
+        moves = [m[0] for m in stats.get("top_moves", [])[:4]]
+        ability = stats.get("top_abilities", [{}])[0][0] if stats.get("top_abilities") else ""
+        item = stats.get("top_items", [{}])[0][0] if stats.get("top_items") else ""
+        nature, evs = "", {}
+        if stats.get("top_spreads"):
+            spread_str = stats["top_spreads"][0][0]
+            # Example: Timid:252/0/0/252/4/0
+            if ":" in spread_str:
+                nature, ev_str = spread_str.split(":", 1)
+                ev_keys = ["hp", "atk", "def", "spa", "spd", "spe"]
+                ev_vals = ev_str.split("/")
+                if len(ev_vals) == 6:
+                    evs = {k: int(v) for k, v in zip(ev_keys, ev_vals)}
+        cur.execute('''
+            INSERT INTO Gen7OUSets (pokemon_name, set_name, moves, ability, item, nature, evs, source)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            pokemon_name,
+            set_name,
+            ','.join(moves),
+            ability,
+            item,
+            nature,
+            str(evs),
+            f'usage_stats_{month}'
+        ))
     conn.commit()
     conn.close()
 

@@ -271,4 +271,70 @@ def test_insert_smogon_analysis_sets(monkeypatch, tmp_path):
     assert row[5] == "Timid"
     assert row[6] == "{'spa': 252, 'spe': 252, 'hp': 4}"
     assert row[7] == "smogon_analysis_page"
+    conn.close()
+
+def test_insert_usage_stats_sets(monkeypatch, tmp_path):
+    db_path = tmp_path / "test_db.sqlite3"
+    # Create minimal required tables
+    populate_db.create_gen7ou_sets_table(db_path)
+    
+    # Mock fetch_usage_stats module
+    mock_module = types.SimpleNamespace()
+    mock_module.workspace_gen7ou_chaos_data = lambda month: {
+        "data": {
+            "Pikachu": {
+                "Abilities": {
+                    "Static": {"usage": 0.7},
+                    "Lightning Rod": {"usage": 0.3}
+                },
+                "Items": {
+                    "Light Ball": {"usage": 0.8},
+                    "Choice Scarf": {"usage": 0.2}
+                },
+                "Moves": {
+                    "Thunderbolt": {"usage": 0.9},
+                    "Volt Switch": {"usage": 0.8},
+                    "Hidden Power Ice": {"usage": 0.7},
+                    "Grass Knot": {"usage": 0.6},
+                    "Quick Attack": {"usage": 0.5}
+                },
+                "Spreads": {
+                    "Timid:252/0/0/252/4/0": {"usage": 0.6},
+                    "Jolly:0/252/0/0/4/252": {"usage": 0.4}
+                }
+            }
+        }
+    }
+    mock_module.parse_chaos_data = lambda data: {
+        "Pikachu": {
+            "top_abilities": [("Static", {"usage": 0.7}), ("Lightning Rod", {"usage": 0.3})],
+            "top_items": [("Light Ball", {"usage": 0.8}), ("Choice Scarf", {"usage": 0.2})],
+            "top_moves": [
+                ("Thunderbolt", {"usage": 0.9}),
+                ("Volt Switch", {"usage": 0.8}),
+                ("Hidden Power Ice", {"usage": 0.7}),
+                ("Grass Knot", {"usage": 0.6})
+            ],
+            "top_spreads": [("Timid:252/0/0/252/4/0", {"usage": 0.6})]
+        }
+    }
+    monkeypatch.setitem(sys.modules, "data_scripts.fetch_usage_stats", mock_module)
+    
+    # Run insertion
+    populate_db.insert_usage_stats_sets(db_path, month="2022-12")
+    
+    # Check DB
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    cur.execute("SELECT pokemon_name, set_name, moves, ability, item, nature, evs, source FROM Gen7OUSets")
+    row = cur.fetchone()
+    assert row is not None
+    assert row[0] == "Pikachu"
+    assert row[1] == "Usage Stats 2022-12"
+    assert row[2] == "Thunderbolt,Volt Switch,Hidden Power Ice,Grass Knot"
+    assert row[3] == "Static"
+    assert row[4] == "Light Ball"
+    assert row[5] == "Timid"
+    assert row[6] == "{'hp': 252, 'atk': 0, 'def': 0, 'spa': 252, 'spd': 4, 'spe': 0}"
+    assert row[7] == "usage_stats_2022-12"
     conn.close() 
